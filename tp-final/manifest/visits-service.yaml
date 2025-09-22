@@ -10,3 +10,60 @@ spec:
   selector:
     app: petclinic
     tier: visits
+
+
+    Parfait — je te donne une commande prête à l’emploi en utilisant les virtual server endpoints visibles sur ta capture et en gardant les bonnes pratiques (URL-encode du mot de passe, TLS/CAFile, URI unique).
+Remplace seulement les variables USERNAME / PASSWORD (ou exporte-les avant) et ajuste REPLSET si nécessaire.
+
+⸻
+
+1) Exporte tes variables (exemple)
+
+export USERNAME="ton_user"
+export PASSWORD="tonMotDePasseAvec@Et:Chars"
+export ARCHIVE="/home/l46381/mongodump_mg002i003095.gz"
+
+2) URL-encode le mot de passe (important si caractères spéciaux)
+
+ENCODED_PASS=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe=''))" "$PASSWORD")
+
+3) Valeurs prises depuis ta capture (hosts + port)
+
+NODE1="4c536ca5-3995-49ce-8fdd-42e182f0b802-0.cpk49tfb0u1u4dfkbpug.private.databases.appdomain.cloud"
+NODE2="4c536ca5-3995-49ce-8fdd-42e182f0b802-1.cpk49tfb0u1u4dfkbpug.private.databases.appdomain.cloud"
+NODE3="4c536ca5-3995-49ce-8fdd-42e182f0b802-2.cpk49tfb0u1u4dfkbpug.private.databases.appdomain.cloud"
+PORT=31230
+REPLSET="mg002i003095"    # remplace par le nom exact du replicaSet si ce n'est pas celui-ci
+CAFILE="/apps/exploit/scripts/certs/ca_ibmclouddatabases.pem"
+
+Si le nom du replicaSet t’est inconnu, demande au DBA ou teste sans replicaSet= (mais mieux avec le nom exact).
+
+4) Construire l’URI et lancer mongodump
+
+URI="mongodb://$USERNAME:$ENCODED_PASS@$NODE1:$PORT,$NODE2:$PORT,$NODE3:$PORT/?authSource=admin&replicaSet=$REPLSET&tls=true&tlsCAFile=$CAFILE"
+
+# test de la connexion (facultatif, ouvre un shell mongosh)
+mongosh "$URI"
+
+# dump compressé en archive
+mongodump --uri="$URI" --gzip --archive="$ARCHIVE"
+
+5) Alternative sûre (éviter mot de passe visible dans ps)
+
+Si tu préfères ne pas mettre le mot de passe dans la ligne de commande :
+
+URI_NOPW="mongodb://$NODE1:$PORT,$NODE2:$PORT,$NODE3:$PORT/?authSource=admin&replicaSet=$REPLSET&tls=true&tlsCAFile=$CAFILE"
+
+# la commande te demandera le mot de passe en stdin (moins exposé dans `ps`)
+mongodump --uri="$URI_NOPW" --username="$USERNAME" --gzip --archive="$ARCHIVE"
+
+
+⸻
+
+Remarques finales
+	•	Vérifie que le fichier CA existe et que l’utilisateur courant a le droit de le lire.
+	•	Assure-toi que le répertoire cible pour l’archive est accessible et a suffisamment d’espace.
+	•	Si tu as un timeout (server selection timed out), teste d’abord la connectivité réseau (avec openssl s_client -connect host:port ou nc -vz) depuis la VM.
+	•	Si mongodump renvoie une erreur d’authent, essaye d’abord de te connecter avec mongosh en utilisant la même URI pour valider user/password/CA.
+
+Veux-tu que je génère la commande exacte en collant ta valeur réelle USERNAME (ou que j’encode ton PASSWORD pour toi) — colle les valeurs si tu veux que je la remplisse entièrement.
